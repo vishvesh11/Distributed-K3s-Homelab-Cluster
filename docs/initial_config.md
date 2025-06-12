@@ -302,10 +302,34 @@ K3S_URL=[https://10.0.0.80:6443](https://10.0.0.80:6443) # Using Master's Intern
 
 # Install K3s as a worker agent
 # Replace <YOUR_K3S_NODE_TOKEN> with the token obtained in Step 1.2
-curl -sfL [https://get.k3s.io](https://get.k3s.io) | K3S_URL="$K3S_URL" K3S_TOKEN="<YOUR_K3S_NODE_TOKEN>" sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.32.5+k3s1" K3S_URL=https://<master node url>:6443 K3S_TOKEN="<node token>" sh -
 
 # Verify K3s agent status
 sudo systemctl status k3s-agent
+# Now do 
+kubectl get nodes
+#if you get something like this "E0612 11:27:57.915326   26117 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"http://localhost:8080/api?timeout=32s\": dial tcp [::1]:8080: connect: connection refused"
+#The connection to the server localhost:8080 was refused - did you specify the right host or port?"
+#then go to master node 
+cat ~/.kube/config #master node
+#copy the config and change the 0.0.0.0:6443 to <ip of master>:6443
+#next on worker node
+mkdir -p ~/.kube
+vi ~/.kube/config
+#paste the config and change server: <master node ip>:6443 & esc + :wq 
+export KUBECONFIG=~/.kube/config
+chmod 600 ~/.kube/config
+echo 'export KUBECONFIG=~/.kube/config' >> ~/.bashrc #makes persistant 
+source ~/.bashrc # Apply changes immediately
+#now try on worker node
+kubectl get nodes
+#you shoudld see something like this
+root@vishvesh-server-2:~# kubectl get nodes
+NAME                     STATUS     ROLES                  AGE    VERSION
+instance-20250530-2005   Ready      control-plane,master   5d4h   v1.32.5+k3s1
+vishvesh-server-2        Ready      <none>                 64m    v1.32.5+k3s1
+vishveshserver           Ready      worker                 4d7h   v1.32.5+k3s1 
+
 ```
 
 ## ✅ Verification
