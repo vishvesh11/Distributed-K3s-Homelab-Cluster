@@ -55,28 +55,7 @@ K3s includes Traefik as its default Ingress Controller, we will install rancher 
 curl -sfL [https://get.k3s.io](https://get.k3s.io) | INSTALL_K3S_EXEC="server --tls-san rancher.vishvesh.me" sh -
 
 
-sudo systemctl status k3s # this will show the status of k3s ensure enabled and running is present in green
-helm repo add rancher-stable https://releases.rancher.com/server-charts/stable
-helm repo update
-
-# Create cert-manager namespace
-kubectl create namespace cattle-system # Rancher's namespace
-
-# Install cert-manager (prerequisite for Rancher's TLS)
-# Check cert-manager docs for latest version: https://cert-manager.io/docs/installation/
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.5/cert-manager.crds.yaml
-helm install cert-manager jetstack/cert-manager --namespace cert-manager --version v1.14.5 --set installCRDs=true
-
-# Wait for cert-manager pods to be ready
-kubectl -n cert-manager rollout status deploy cert-manager-webhook
-
-# Install Rancher (use a hostname that resolves to your OCI public IP or a domain you own)
-helm install rancher rancher-stable/rancher \
-    --namespace cattle-system \
-    --set hostname=your.oci.public.ip.nip.io \ # e.g., 140.238.240.161.nip.io
-    --set replicas=1 # For a single-node setup
-    # If you have a real domain, use: --set hostname=rancher.yourdomain.com
-    # And add --set ingress.tls.source=rancher for auto-generated certs
+sudo systemctl status k3s # this will show the status of k3s ensure enabled and running is present in green 
 
 # Check nodes, will display only one for now
 kubectl get nodes

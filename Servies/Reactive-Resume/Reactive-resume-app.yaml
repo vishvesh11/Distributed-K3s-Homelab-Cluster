@@ -1,0 +1,154 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reactive-resume-app
+  namespace: reactive-resume
+  labels:
+    app: reactive-resume
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reactive-resume
+  template:
+    metadata:
+      labels:
+        app: reactive-resume
+    spec:
+      containers:
+        - name: reactive-resume
+          image: amruthpillai/reactive-resume:latest # Use specific version for stability
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: reactive-resume-app-secret # App-specific secrets
+            - secretRef: # comment if using not Google OAuth
+                name: google-oauth-secrets
+          env:
+            - name: PORT
+              value: "3000" # Application listens on this port
+            - name: NODE_ENV
+              value: "production"
+
+            # URLs (Crucial for external access and internal links)
+            - name: PUBLIC_URL
+              value: "https://resumebuilder.vishvesh.me" # <<< CHANGE THIS! Your public app domain
+            - name: NEXTAUTH_URL # Used by NextAuth for callbacks
+              value: "https://resumebuilder.vishvesh.me" # <<< CHANGE THIS! Your public app domain
+
+            # Printer (Browserless)
+            - name: CHROME_URL
+              value: "ws://reactive-resume-pdf-generator:3000" # Internal ClusterIP service name and port
+
+            # Database (Postgres)
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_DB_URL # Uses the full URL from the secret
+
+            # Emails (Optional, configure if needed)
+            - name: MAIL_FROM
+              value: "noreply@resumebuilder.yourdoamin.me" # <<< CHANGE THIS!
+            - name: STORAGE_ENDPOINT
+              value: "minio" # Internal MinIO service name
+            - name: STORAGE_PORT
+              value: "9000"
+            - name: STORAGE_REGION
+              value: "us-east-1"
+            - name: STORAGE_BUCKET
+              value: "reactive-resume-files" # Consistent bucket name
+            - name: STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secrets
+                  key: MINIO_ROOT_USER
+            - name: STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secrets
+                  key: MINIO_ROOT_PASSWORD
+            - name: STORAGE_USE_SSL
+              value: "false" # MinIO Ingress uses HTTPS, but this is container to container.
+            - name: STORAGE_SKIP_BUCKET_CHECK
+              value: "false"
+            - name: ASSET_PATH
+              value: "/app/dist/apps/artboard" # Path to frontend build within container
+            - name: NEXT_PUBLIC_BASE_PATH
+              value: ""
+
+                #Google OAuth (Recommended, comment if you wish not to ue it.)
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secrets
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secrets
+                  key: GOOGLE_CLIENT_SECRET
+            - name: GOOGLE_CALLBACK_URL
+              value: "https://resumebuilder.yourdmain.me/api/auth/google/callback" # <<< Same as in google cloud console
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reactive-resume-app
+  namespace: reactive-resume
+  labels:
+    app: reactive-resume
+spec:
+  selector:
+    app: reactive-resume
+  ports:
+    - protocol: TCP
+      port: 80 # Service port for Ingress
+      targetPort: 3000 # Port app listens on inside container
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reactive-resume-ingress
+  namespace: reactive-resume
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: letsencrypt-clusterissuer # Your ClusterIssuer name
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  rules:
+    - host: resumebuilder.yourdomain.me # <<< CHANGE THIS!
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reactive-resume-app
+                port:
+                  number: 80 # Service port exposed by reactive-resume-app service
+  tls:
+    - hosts:
+        - resumebuilder.yourdomain.me # <<< CHANGE THIS!
+      secretName: reactive-resume-tls-secret # Cert-Manager will store the certificate here

@@ -1,0 +1,96 @@
+# --- 3. MinIO (Object Storage) ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  namespace: reactive-resume
+spec:
+  accessModes:
+    - ReadWriteOnce # Adjust as needed
+  resources:
+    requests:
+      storage: 10Gi # Adjust
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: reactive-resume
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          command: ["minio", "server", "/data"]
+          envFrom:
+            - secretRef:
+                name: minio-secrets # MinIO credentials from secret
+          volumeMounts:
+            - name: minio-storage
+              mountPath: /data
+          ports:
+            - containerPort: 9000 # MinIO API port
+            - containerPort: 9001 # MinIO Console port
+      volumes:
+        - name: minio-storage
+          persistentVolumeClaim:
+            claimName: minio-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: reactive-resume
+  labels:
+    app: minio
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+    - name: console
+      protocol: TCP
+      port: 9001
+      targetPort: 9001
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-ingress
+  namespace: reactive-resume
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: letsencrypt-prod-cloudflare
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  rules:
+    - host: minio.vishvesh.me # <<< CHANGE THIS to your desired MinIO public domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9000 # MinIO API port for S3 compatibility
+  tls:
+    - hosts:
+        - minio.yourdomain.me # <<< CHANGE THIS
+      secretName: minio-tls-secret # Cert-Manager will store the certificate here
+

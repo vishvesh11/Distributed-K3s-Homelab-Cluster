@@ -1,0 +1,6 @@
+# --- Namespace ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: reactive-resume
+#you can create a name space by cli too `kubectl create namespace reactive-resume`

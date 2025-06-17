@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reactive-resume-pdf-generator
+  namespace: reactive-resume
+  labels:
+    app: reactive-resume-pdf-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reactive-resume-pdf-generator
+  template:
+    metadata:
+      labels:
+        app: reactive-resume-pdf-generator
+    spec:
+      containers:
+        - name: pdf-generator
+          image: ghcr.io/browserless/chromium:v2.18.0
+          env:
+            - name: TOKEN # Browserless token, pulled from secret
+              valueFrom:
+                secretKeyRef:
+                  name: reactive-resume-app-secret
+                  key: CHROME_TOKEN
+            - name: TIMEOUT
+              value: "30000" # Increased timeout for page rendering
+            - name: CONCURRENT
+              value: "10"
+            - name: EXIT_ON_HEALTH_FAILURE
+              value: "true"
+            - name: PRE_REQUEST_HEALTH_CHECK
+              value: "true"
+            - name: HEADLESS
+              value: "true"
+          ports:
+            - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reactive-resume-pdf-generator
+  namespace: reactive-resume
+  labels:
+    app: reactive-resume-pdf-generator
+spec:
+  selector:
+    app: reactive-resume-pdf-generator
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  type: ClusterIP
